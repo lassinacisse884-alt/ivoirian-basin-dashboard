@@ -955,17 +955,18 @@ function renderBP1Chemicals(){
 
 function renderBP1Energy(){
   const d=filterByDate(RAW.BP1.energy,dateStart,dateEnd);
-  const fs=filterByDate(RAW.BP1.fuel,dateStart,dateEnd);
+  const fs=filterByDate(RAW.BP1.fuel,dateStart,dateEnd).slice().sort((a,b)=>a.date<b.date?-1:1);
   if(!d.length){$('bp1-energy').innerHTML='<div class="empty-state"><div class="es-icon">📭</div><div class="es-text">Aucune donnée disponible</div></div>';return;}
-  const fuelGas=d.filter(x=>x.label==='Fuel gas consumption');
-  const power=d.filter(x=>x.label==='Power Generated');
-  const diesel=d.filter(x=>x.label==='Diesel consumption');
+  const sortByDate=arr=>arr.slice().sort((a,b)=>a.date<b.date?-1:1);
+  const fuelGas=sortByDate(d.filter(x=>x.label==='Fuel gas consumption (MMscfd)'));
+  const power=sortByDate(d.filter(x=>x.label==='Power Generated (MW)'));
+  const diesel=sortByDate(d.filter(x=>x.label==='Diesel consumption (CBM M3)'));
   $('bp1-energy').innerHTML=`
     <div class="kpi-row">
-      ${kpiCard('⚡','GTG1 Power Moy.',avg(power.map(x=>x.gtg1)),'kW',0,'gold')}
-      ${kpiCard('⚡','GTG2 Power Moy.',avg(power.map(x=>x.gtg2)),'kW',0,'green')}
-      ${kpiCard('🔥','GTG1 Fuel Gas',avg(fuelGas.map(x=>x.gtg1)),'MMSCFD',0)}
-      ${kpiCard('⛽','EDG1 Diesel',avg(diesel.map(x=>x.edg1)),'L/j',0,'purple')}
+      ${kpiCard('⚡','GTG1 Power Moy.',avg(power.map(x=>x.gtg1)),'MW',0,'gold')}
+      ${kpiCard('⚡','GTG2 Power Moy.',avg(power.map(x=>x.gtg2)),'MW',0,'green')}
+      ${kpiCard('🔥','GTG1 Fuel Gas',avg(fuelGas.map(x=>x.gtg1)),'MMscfd',0)}
+      ${kpiCard('⛽','Diesel GTG (moy.)',avg(diesel.map(x=>x.gtg1+x.gtg2)),'CBM M3/j',0,'purple')}
       ${kpiCard('🛢️','MGO Stock',fs.length?fs[fs.length-1].mgo:0,'m³',0)}
     </div>
     <div class="chart-grid cols2">
@@ -980,7 +981,7 @@ function renderBP1Energy(){
     </div>
     <div class="chart-grid cols2">
       <div class="chart-card">
-        <div class="chart-header"><div class="chart-title">Consommation Diesel (EDG)</div></div>
+        <div class="chart-header"><div class="chart-title">Consommation Diesel — GTG & EDG (CBM M3)</div></div>
         <div id="chartBP1Diesel"></div>
       </div>
       <div class="chart-card">
@@ -989,9 +990,9 @@ function renderBP1Energy(){
       </div>
     </div>`;
   const catsPow=power.map(x=>x.date);
-  mkLine('chartBP1GTGPower',[{name:'GTG1',data:power.map(x=>x.gtg1)},{name:'GTG2',data:power.map(x=>x.gtg2)}],catsPow,'kW',['#F4A824','#00B4D8']);
-  mkLine('chartBP1GTGFuel',[{name:'GTG1 Fuel',data:fuelGas.map(x=>x.gtg1)},{name:'GTG2 Fuel',data:fuelGas.map(x=>x.gtg2)},{name:'Boiler P',data:fuelGas.map(x=>x.boiler_p)},{name:'Boiler S',data:fuelGas.map(x=>x.boiler_s)}],fuelGas.map(x=>x.date),'MMSCFD',['#22D3A0','#00B4D8','#8B5CF6','#F4A824']);
-  mkBar('chartBP1Diesel',[{name:'EDG1',data:diesel.map(x=>x.edg1)},{name:'EDG2',data:diesel.map(x=>x.edg2)}],diesel.map(x=>x.date),'Litres/j',['#EF4444','#F4A824']);
+  mkLine('chartBP1GTGPower',[{name:'GTG1 (MW)',data:power.map(x=>x.gtg1)},{name:'GTG2 (MW)',data:power.map(x=>x.gtg2)}],catsPow,'MW',['#F4A824','#00B4D8']);
+  mkLine('chartBP1GTGFuel',[{name:'GTG1 Fuel',data:fuelGas.map(x=>x.gtg1)},{name:'GTG2 Fuel',data:fuelGas.map(x=>x.gtg2)},{name:'Boiler P',data:fuelGas.map(x=>x.boiler_p)},{name:'Boiler S',data:fuelGas.map(x=>x.boiler_s)}],fuelGas.map(x=>x.date),'MMscfd',['#22D3A0','#00B4D8','#8B5CF6','#F4A824']);
+  mkBar('chartBP1Diesel',[{name:'GTG1 Diesel',data:diesel.map(x=>x.gtg1)},{name:'GTG2 Diesel',data:diesel.map(x=>x.gtg2)},{name:'EDG1',data:diesel.map(x=>x.edg1)},{name:'EDG2',data:diesel.map(x=>x.edg2)}],diesel.map(x=>x.date),'CBM M3/j',['#F4A824','#00B4D8','#EF4444','#8B5CF6']);
   if(fs.length)mkArea('chartBP1FuelStock',[{name:'MGO Stock (m³)',data:fs.map(x=>x.mgo)},{name:'Pres. Diesel (m³)',data:fs.map(x=>x.pres_diesel)}],fs.map(x=>x.date),'m³',['#00B4D8','#22D3A0']);
 }
 
@@ -1150,8 +1151,8 @@ function renderBP2Safety(){
 function renderBP2Chemicals(){
   const d=filterByDate(RAW.BP2.chemicals,dateStart,dateEnd);
   if(!d.length){$('bp2-chemicals').innerHTML='<div class="empty-state"><div class="es-icon">📭</div><div class="es-text">Aucune donnée disponible</div></div>';return;}
-  const stock=d.filter(x=>x.label==='In Stock (Lit)');
-  const cons=d.filter(x=>x.label==='Consumed (L/d)');
+  const stock=d.filter(x=>x.label==='In Stock');
+  const cons=d.filter(x=>x.label==='Consumed');
   const prods=['demulsifier','antifoam','scale_inh','deoiler','biocide1','biocide2','sw_scale','wax_inh','port_meoh','stbd_meoh'];
   const labels=['Demulsifier','Antifoam','Scale Inh','Deoiler','Biocide 1','Biocide 2','SW Scale','Wax Inh','Port MeOH','Stbd MeOH'];
   $('bp2-chemicals').innerHTML=`
