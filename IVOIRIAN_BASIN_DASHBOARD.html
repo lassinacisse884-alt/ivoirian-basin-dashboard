@@ -787,6 +787,38 @@ function mkWellCharts(prefix, wells, d, fields){
   }
 }
 
+// ==============================
+// PER-WELL TIME TREND SELECTOR
+// ==============================
+function setupWellTrend(selId, chartId, wells, data, fields) {
+  const sel = $(selId);
+  if (!sel || !wells.length) return;
+  sel.innerHTML = wells.map(w => `<option value="${w}">${w}</option>`).join('');
+  function draw(well) {
+    const wd = data.filter(x => x.well_id === well).sort((a,b) => a.date<b.date?-1:1);
+    const cats = wd.map(x => x.date);
+    mkChart(chartId, {
+      ...CHART_OPTS,
+      chart:{...CHART_OPTS.chart,type:'line',height:300,toolbar:{show:false}},
+      series:[
+        {name:fields.oilLabel||'Huile',data:wd.map(x=>x[fields.oil]??null),yAxisIndex:0},
+        {name:fields.waterLabel||'Eau',data:wd.map(x=>x[fields.water]??null),yAxisIndex:0},
+        {name:fields.bhpLabel||'BHP',data:wd.map(x=>(fields.bhp&&x[fields.bhp]!=null)?x[fields.bhp]:null),yAxisIndex:1},
+      ],
+      xaxis:{categories:cats,labels:{rotate:-30,style:{fontSize:'10px'},formatter:v=>v?v.slice(5):''},tickAmount:Math.min(cats.length,20)},
+      yaxis:[
+        {title:{text:fields.oilUnit||'Bbls/d'},labels:{style:{fontSize:'10px'}}},
+        {opposite:true,title:{text:fields.bhpUnit||'Bar'},labels:{style:{fontSize:'10px'}}},
+      ],
+      colors:['#F4A824','#00B4D8','#22D3A0'],
+      stroke:{curve:'smooth',width:2},
+      legend:{labels:{colors:'#7BA5C9'}},
+    });
+  }
+  if(wells.length) draw(wells[0]);
+  sel.onchange = () => draw(sel.value);
+}
+
 function renderBP1Wells(){
   const d=filterByDate(RAW.BP1.wells,dateStart,dateEnd);
   if(!d.length){$('bp1-wells').innerHTML='<div class="empty-state"><div class="es-icon">📭</div><div class="es-text">Aucune donnée disponible</div></div>';return;}
@@ -815,11 +847,21 @@ function renderBP1Wells(){
         <div class="table-tools"><button class="export-btn">⬇ CSV</button></div>
       </div>
       <div id="bp1WellsTable"></div>
+    </div>
+    <div class="chart-card" style="margin-top:16px;">
+      <div class="chart-header">
+        <div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-teal)"></span>📈 Évolution dans le temps — Puits sélectionné</div>
+        <div class="chart-actions">
+          <select id="wts_sel_bp1" class="date-input" style="min-width:180px;"></select>
+        </div>
+      </div>
+      <div id="wts_ch_bp1"></div>
     </div>`;
   mkWellCharts('chartBP1W', wells, d, {oil:'oil_rate',oilUnit:'Bbls/d',gas:'gas_rate',gasUnit:'MMscfd',choke:'choke',chokeUnit:'Choke (%)',whp:'whp',whpUnit:'Bar',wht:'wht',whtUnit:'°C',bhp:'bhp',bhpUnit:'Bar'});
   const last=d.reduce((acc,r)=>{if(!acc[r.well_id]||r.date>acc[r.well_id].date)acc[r.well_id]=r;return acc;},{});
   buildTable('bp1WellsTable',['Date','Puits ID','Statut','Hrs','Choke %','WHP (Bar)','WHT (°C)','BHP (Bar)','Oil (Bbls/d)','Gas (MMscfd)','Water (Bbls/d)','GOR'],
     Object.values(last).map(x=>[x.date,x.well_id,`<span class="status-badge ${x.status==='Online'?'status-online':'status-si'}">${x.status||'—'}</span>`,x.flowing_hrs,x.choke,x.whp,x.wht,x.bhp,fmt(x.oil_rate),x.gas_rate,fmt(x.water_rate),fmt(x.gor)]));
+  setupWellTrend('wts_sel_bp1','wts_ch_bp1',wells,d,{oil:'oil_rate',oilLabel:'Huile (Bbls/d)',oilUnit:'Bbls/d',water:'water_rate',waterLabel:'Eau (Bbls/d)',bhp:'bhp',bhpLabel:'BHP (Bar)',bhpUnit:'Bar'});
 }
 
 function renderBP1Stocks(){
@@ -994,6 +1036,11 @@ function renderBP2Gas(){
   const cats=d.map(x=>x.date);
   mkLine('chartBP2GasLine',[{name:'Production',data:d.map(x=>x.gas_prod)},{name:'Export',data:d.map(x=>x.gas_export)},{name:'Fuel Gas',data:d.map(x=>x.fuel_gas)},{name:'Gas Lift',data:d.map(x=>x.gas_lift)}],cats,'MMSCFD',['#00B4D8','#22D3A0','#F4A824','#8B5CF6']);
   mkBar('chartBP2GasStack',[{name:'Export',data:d.map(x=>x.gas_export)},{name:'Fuel Gas',data:d.map(x=>x.fuel_gas)},{name:'Gas Lift',data:d.map(x=>x.gas_lift)}],cats,'MMSCFD',['#22D3A0','#F4A824','#8B5CF6'],260,true);
+  $('bp2-gas').insertAdjacentHTML('beforeend',`<div class="chart-card" style="margin-top:16px;"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-green)"></span>🔄🔥 Gas Lift vs Production Gaz — Champ BP2</div></div><div id="chartBP2GasLiftComp"></div></div>`);
+  mkLine('chartBP2GasLiftComp',[
+    {name:'Production Gaz (MMSCFD)',data:d.map(x=>x.gas_prod)},
+    {name:'Gas Lift (MMSCFD)',data:d.map(x=>x.gas_lift)},
+  ],d.map(x=>x.date),'MMSCFD',['#F4A824','#22D3A0']);
 }
 
 function renderBP2Water(){
@@ -1014,6 +1061,13 @@ function renderBP2Water(){
   const cats=d.map(x=>x.date);
   mkArea('chartBP2WaterVol',[{name:'Produite (BPD)',data:d.map(x=>x.water_prod)},{name:'Rejet Mer',data:d.map(x=>x.prod_overboard)}],cats,'BPD',['#8B5CF6','#EF4444']);
   mkArea('chartBP2WaterInj',[{name:'Total Réinj.',data:d.map(x=>x.water_reinj)},{name:'PW Réinj.',data:d.map(x=>x.pw_reinj)},{name:'SW Injecté',data:d.map(x=>x.sw_inj)}],cats,'BPD',['#22D3A0','#00B4D8','#F4A824']);
+  // Chart: Eau Produite vs Injection vs Huile (champ BP2)
+  $('bp2-water').insertAdjacentHTML('beforeend',`<div class="chart-card" style="margin-top:16px;"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-purple)"></span>💧🛢️ Eau Prod. vs Injection vs Huile — Champ BP2</div></div><div id="chartBP2WaterOilComp"></div></div>`);
+  mkLine('chartBP2WaterOilComp',[
+    {name:'Eau Produite (BPD)',data:d.map(x=>x.water_prod)},
+    {name:'SW Injection (BPD)',data:d.map(x=>x.sw_inj)},
+    {name:'PW Réinj. (BPD)',data:d.map(x=>x.water_reinj)},
+  ],d.map(x=>x.date),'BPD',['#00B4D8','#8B5CF6','#22D3A0']);
 }
 
 function renderBP2Wells(){
@@ -1052,6 +1106,10 @@ function renderBP2Wells(){
     Object.values(lastProd).map(x=>[x.date,x.well_id,`<span class="status-badge ${x.status==='Online'?'status-online':'status-si'}">${x.status||'—'}</span>`,fmt(x.oil_prod),x.gas_prod,fmt(x.water_prod),x.choke,x.whp,x.wht,x.dhp,x.gor,x.water_cut]));
   buildTable('bp2WellsInjTable',['Date','Puits','Statut','WI (bbls/d)','Choke%','WHP (Barg)','FL_T (DegC)','AP (Barg)'],
     Object.values(lastInj).map(x=>[x.date,x.well_id,`<span class="status-badge status-online">Online</span>`,fmt(x.wi),x.choke,x.whp,x.fl_t,x.ap]));
+  // Ajoute section trend par puits (inject HTML dynamiquement)
+  const bp2WellsTrendHtml = `<div class="chart-card" style="margin-top:16px;"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-teal)"></span>📈 Évolution dans le temps — Puits sélectionné</div><div class="chart-actions"><select id="wts_sel_bp2" class="date-input" style="min-width:180px;"></select></div></div><div id="wts_ch_bp2"></div></div>`;
+  $('bp2-wells').insertAdjacentHTML('beforeend', bp2WellsTrendHtml);
+  setupWellTrend('wts_sel_bp2','wts_ch_bp2',wells,dp,{oil:'oil_prod',oilLabel:'Huile (bbl/d)',oilUnit:'bbl/d',water:'water_prod',waterLabel:'Eau (bbl/d)',bhp:'dhp',bhpLabel:'DHP (Barg)',bhpUnit:'Barg'});
 }
 
 function renderBP2Stocks(){
@@ -1233,6 +1291,14 @@ function renderPCI11Wells(){
     Object.values(lastL).map(x=>[x.date,x.well_id,x.prod_sys,x.ftp,x.cp,x.choke,x.hrs,fmt(x.oil),x.gas,fmt(x.water)]));
   buildTable('pci11PanthTable',['Date','Puits','Système','FTP (PSIG)','CP (PSIG)','Choke','Hrs','Oil (BBLS)','Gas (MMSCF)','Water (BBLS)'],
     Object.values(lastP).map(x=>[x.date,x.well_id,x.prod_sys,x.ftp,x.cp,x.choke,x.hrs,fmt(x.oil),x.gas,fmt(x.water)]));
+  const pciTrendHtml = `
+    <div style="margin:16px 0 8px;padding:6px 12px;background:var(--card-bg);border-radius:6px;font-size:13px;">🦁 <strong style="color:var(--accent-gold)">Évolution dans le temps — Lion</strong></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-teal)"></span>📈 Puits Lion sélectionné</div><div class="chart-actions"><select id="wts_sel_pci11l" class="date-input" style="min-width:180px;"></select></div></div><div id="wts_ch_pci11l"></div></div>
+    <div style="margin:16px 0 8px;padding:6px 12px;background:var(--card-bg);border-radius:6px;font-size:13px;">🐆 <strong style="color:var(--accent-green)">Évolution dans le temps — Panthère</strong></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-teal)"></span>📈 Puits Panthère sélectionné</div><div class="chart-actions"><select id="wts_sel_pci11p" class="date-input" style="min-width:180px;"></select></div></div><div id="wts_ch_pci11p"></div></div>`;
+  $('pci11-wells').insertAdjacentHTML('beforeend', pciTrendHtml);
+  setupWellTrend('wts_sel_pci11l','wts_ch_pci11l',lionW,dl,{oil:'oil',oilLabel:'Huile (BBLS/d)',oilUnit:'BBLS/d',water:'water',waterLabel:'Eau (BBLS/d)',bhp:'sitp',bhpLabel:'SITP (PSIG)',bhpUnit:'PSIG'});
+  setupWellTrend('wts_sel_pci11p','wts_ch_pci11p',panthW,dp,{oil:'oil',oilLabel:'Huile (BBLS/d)',oilUnit:'BBLS/d',water:'water',waterLabel:'Eau (BBLS/d)',bhp:'sitp',bhpLabel:'SITP (PSIG)',bhpUnit:'PSIG'});
 }
 
 // ---- FOXTROT ----
@@ -1343,6 +1409,14 @@ function renderFoxWells(){
     Object.values(lastA).map(x=>[x.date,x.well_id,x.gas,fmt(x.hcl),fmt(x.eau),x.temps_f,x.pfd,x.tfd,x.ptw,x.duse_act]));
   buildTable('foxPFBTable',['Date','Puits','Gaz (MMSCFD)','HCL (BBLS)','Eau (BBLS)','Temps f (h)','P.Fond (PSIG)','T.Fond (°F)','P.Tête (PSIG)','Duse (po.)'],
     Object.values(lastB).map(x=>[x.date,x.well_id,x.gas,fmt(x.hcl),fmt(x.eau),x.temps_f,x.pfd,x.tfd,x.ptw,x.duse_act]));
+  const foxTrendHtml = `
+    <div style="margin:16px 0 8px;padding:6px 12px;background:var(--card-bg);border-radius:6px;font-size:13px;">🏭 <strong style="color:var(--accent-gold)">Évolution dans le temps — PFA</strong></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-teal)"></span>📈 Puits PFA sélectionné</div><div class="chart-actions"><select id="wts_sel_foxa" class="date-input" style="min-width:180px;"></select></div></div><div id="wts_ch_foxa"></div></div>
+    <div style="margin:16px 0 8px;padding:6px 12px;background:var(--card-bg);border-radius:6px;font-size:13px;">🏭 <strong style="color:var(--accent-green)">Évolution dans le temps — PFB</strong></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-teal)"></span>📈 Puits PFB sélectionné</div><div class="chart-actions"><select id="wts_sel_foxb" class="date-input" style="min-width:180px;"></select></div></div><div id="wts_ch_foxb"></div></div>`;
+  $('fox-wells').insertAdjacentHTML('beforeend', foxTrendHtml);
+  setupWellTrend('wts_sel_foxa','wts_ch_foxa',pfaW,da,{oil:'hcl',oilLabel:'HCL (BBLS/d)',oilUnit:'BBLS/d',water:'eau',waterLabel:'Eau (BBLS/d)',bhp:'pfd',bhpLabel:'P.Fond (PSIG)',bhpUnit:'PSIG'});
+  setupWellTrend('wts_sel_foxb','wts_ch_foxb',pfbW,db,{oil:'hcl',oilLabel:'HCL (BBLS/d)',oilUnit:'BBLS/d',water:'eau',waterLabel:'Eau (BBLS/d)',bhp:'pfd',bhpLabel:'P.Fond (PSIG)',bhpUnit:'PSIG'});
 }
 
 function renderFoxStocks(){
@@ -1403,6 +1477,12 @@ function renderEspGas(){
   const cats=d.map(x=>x.date);
   mkLine('chartEspGasEW',[{name:'Total (MMSCFD)',data:d.map(x=>x.total_prod)},{name:'Est',data:d.map(x=>x.east)},{name:'Ouest',data:d.map(x=>x.west)}],cats,'MMSCFD',['#F4A824','#22D3A0','#00B4D8']);
   mkArea('chartEspGasExport',[{name:'Export FPSO',data:d.map(x=>x.export_fpso)},{name:'Export Terminal',data:d.map(x=>x.export_terminal)},{name:'G Lift Est',data:d.map(x=>x.glift_e)},{name:'G Lift Ouest',data:d.map(x=>x.glift_w)}],cats,'MMSCFD',['#22D3A0','#00B4D8','#F4A824','#8B5CF6']);
+  $('esp-gas').insertAdjacentHTML('beforeend',`<div class="chart-card" style="margin-top:16px;"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-green)"></span>🔄🔥 Gas Lift vs Production Gaz — Champ Espoir</div></div><div id="chartEspGasLiftComp"></div></div>`);
+  mkLine('chartEspGasLiftComp',[
+    {name:'Prod. Totale (MMSCFD)',data:d.map(x=>x.total_prod)},
+    {name:'G Lift Est (MMSCFD)',data:d.map(x=>x.glift_e)},
+    {name:'G Lift Ouest (MMSCFD)',data:d.map(x=>x.glift_w)},
+  ],d.map(x=>x.date),'MMSCFD',['#F4A824','#22D3A0','#8B5CF6']);
 }
 
 function renderEspWater(){
@@ -1423,6 +1503,11 @@ function renderEspWater(){
   const cats=d.map(x=>x.date);
   mkArea('chartEspWaterProd',[{name:'Est (BPD)',data:d.map(x=>x.east_prod)},{name:'Ouest (BPD)',data:d.map(x=>x.west_prod)},{name:'Total',data:d.map(x=>x.total_prod)}],cats,'BPD',['#22D3A0','#00B4D8','#F4A824']);
   mkArea('chartEspWaterInj',[{name:'Est WI (BPD)',data:d.map(x=>x.east_wi)},{name:'Ouest WI (BPD)',data:d.map(x=>x.west_wi)},{name:'Total WI',data:d.map(x=>x.total_wi)}],cats,'BPD',['#8B5CF6','#EF4444','#F4A824']);
+  $('esp-water').insertAdjacentHTML('beforeend',`<div class="chart-card" style="margin-top:16px;"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-purple)"></span>💧🛢️ Eau Prod. vs Injection vs Huile — Champ Espoir</div></div><div id="chartEspWaterOilComp"></div></div>`);
+  mkLine('chartEspWaterOilComp',[
+    {name:'Total Eau Prod. (BPD)',data:d.map(x=>x.total_prod)},
+    {name:'Total WI (BPD)',data:d.map(x=>x.total_wi)},
+  ],d.map(x=>x.date),'BPD',['#00B4D8','#8B5CF6']);
 }
 
 function renderEspWells(){
@@ -1475,6 +1560,14 @@ function renderEspWells(){
     Object.values(lastE).map(x=>[x.date,x.well_id,fmt(x.oil),x.gas,x.gaslift,fmt(x.water),x.bhp,x.bht,x.thp,x.gor,x.water_cut]));
   buildTable('espWestTable',['Date','Puits','Oil (stbbls)','Gas (MMscf)','G Lift','Water (bwpd)','BHP (psia)','BHT (°F)','THP (psig)','GOR','Water Cut %'],
     Object.values(lastW).map(x=>[x.date,x.well_id,fmt(x.oil),x.gas,x.gaslift,fmt(x.water),x.bhp,x.bht,x.thp,x.gor,x.water_cut]));
+  const espTrendHtml = `
+    <div style="margin:16px 0 8px;padding:6px 12px;background:var(--card-bg);border-radius:6px;font-size:13px;">🌅 <strong style="color:var(--accent-green)">Évolution dans le temps — Est</strong></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-teal)"></span>📈 Puits Est sélectionné</div><div class="chart-actions"><select id="wts_sel_espe" class="date-input" style="min-width:180px;"></select></div></div><div id="wts_ch_espe"></div></div>
+    <div style="margin:16px 0 8px;padding:6px 12px;background:var(--card-bg);border-radius:6px;font-size:13px;">🌇 <strong style="color:var(--accent-blue)">Évolution dans le temps — Ouest</strong></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title"><span class="ct-dot" style="--dot-color:var(--accent-teal)"></span>📈 Puits Ouest sélectionné</div><div class="chart-actions"><select id="wts_sel_espw" class="date-input" style="min-width:180px;"></select></div></div><div id="wts_ch_espw"></div></div>`;
+  $('esp-wells').insertAdjacentHTML('beforeend', espTrendHtml);
+  setupWellTrend('wts_sel_espe','wts_ch_espe',ew,de,{oil:'oil',oilLabel:'Huile (stbbls/d)',oilUnit:'stbbls/d',water:'water',waterLabel:'Eau (bwpd)',bhp:'bhp',bhpLabel:'BHP (psia)',bhpUnit:'psia'});
+  setupWellTrend('wts_sel_espw','wts_ch_espw',ww,dw,{oil:'oil',oilLabel:'Huile (stbbls/d)',oilUnit:'stbbls/d',water:'water',waterLabel:'Eau (bwpd)',bhp:'bhp',bhpLabel:'BHP (psia)',bhpUnit:'psia'});
 }
 
 function renderEspStocks(){
