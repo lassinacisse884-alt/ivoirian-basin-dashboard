@@ -1,0 +1,30 @@
+# Fichiers Excel (trop lourds et potentiellement confidentiels)
+*.xlsm
+*.xlsx
+*.xls
+
+# Fichiers temporaires Excel
+~$*
+
+# Fichiers Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environnements virtuels
+venv/
+env/
+.venv/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dossiers de données brutes
+BASE DE DONNEES/
+C407D000/
