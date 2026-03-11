@@ -48,7 +48,7 @@ echo.
 echo ================================================
 echo   [SUCCES] Dashboard publie en ligne !
 echo   Vos collegues peuvent y acceder via :
-echo   https://VOTRE_USERNAME.github.io/VOTRE_REPO/
+echo   https://lassinacisse884-alt.github.io/ivoirian-basin-dashboard/
 echo ================================================
 echo.
 pause
